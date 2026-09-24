@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draw Guide</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>✏️ Draw Guide</h1>
+      <p>Upload any picture and get a step-by-step guide to drawing it, from basic shapes to finished colour.</p>
+    </header>
+
+    <main>
+      <div id="key-warning" class="banner" hidden>
+        The server has no Gemini API key. Copy <code>.env.example</code> to <code>.env</code>, add your key from
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, then restart the server.
+      </div>
+
+      <section class="card upload-card">
+        <label id="dropzone" class="dropzone" for="file-input">
+          <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <img id="preview" alt="Your reference image" hidden />
+          <span id="dropzone-hint">
+            <strong>Choose an image</strong> or drag it here<br />
+            <small>PNG, JPG or WEBP</small>
+          </span>
+        </label>
+
+        <div class="controls">
+          <label for="style-select">Drawing style</label>
+          <select id="style-select">
+            <option value="original">Keep the original style</option>
+            <option value="cartoon">Cartoon</option>
+            <option value="anime">Anime / manga</option>
+            <option value="realistic">Realistic coloured pencil</option>
+            <option value="watercolour">Watercolour &amp; ink</option>
+            <option value="chibi">Chibi</option>
+          </select>
+          <p class="hint">If your picture is a photo, pick a style so the guide shows it as a drawing.</p>
+          <button id="generate-btn" class="primary" disabled>Make my drawing guide</button>
+          <p id="status" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <section id="guide" hidden>
+        <div id="summary" class="card summary"></div>
+        <ol id="steps" class="steps"></ol>
+      </section>
+    </main>
+
+    <template id="step-template">
+      <li class="step card">
+        <div class="step-media">
+          <div class="step-image"></div>
+        </div>
+        <div class="step-body">
+          <p class="step-number"></p>
+          <h3 class="step-title"></h3>
+          <ul class="step-instructions"></ul>
+          <p class="step-tip" hidden></p>
+        </div>
+      </li>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
