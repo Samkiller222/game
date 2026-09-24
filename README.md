@@ -17,8 +17,8 @@ It's a fully static site (HTML/CSS/JS, no build step), so it runs on **GitHub Pa
 
 - `index.html`, `style.css` and `app.js` are the page and UI. Uploads are shrunk to 1024px in the browser.
 - `gemini.js` calls the Gemini API directly from the browser:
-  - **Text model** (`gemini-2.5-flash`): looks at the image and returns the written guide as structured JSON.
-  - **Image model** (`gemini-2.5-flash-image`): makes each stage picture.
+  - **Text model** (newest stable Flash, e.g. `gemini-3.6-flash`): looks at the image and returns the written guide as structured JSON.
+  - **Image model** (newest Flash image model, e.g. `gemini-3.1-flash-image` "Nano Banana 2"): makes each stage picture.
 - The stage pictures are generated **backwards** (finished → colours → details → line art → sketch → shapes).
   Each one is made by *removing* something from the next stage, so the steps line up far better than
   drawing each one from scratch. Use **Redraw** on any step to regenerate it and the steps before it.
@@ -53,4 +53,4 @@ python3 -m http.server 8000   # then open http://localhost:8000
 - One guide costs 1 text call and 5–6 image calls, and takes about 1–2 minutes.
 - For photos, choose a drawing style (cartoon, anime, …) so the guide teaches a drawing instead of copying a photo.
   "Keep the original style" uses your upload as the final step.
-- To change models, edit `TEXT_MODEL` / `IMAGE_MODEL` at the top of `gemini.js`.
+- Models are picked automatically from the ones your key can use, so retired models are skipped. The page shows which ones it is using. Fallback names are at the top of `gemini.js`.

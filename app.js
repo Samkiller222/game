@@ -1,6 +1,6 @@
 // Draw Guide frontend. Runs entirely in the browser (GitHub Pages friendly).
 
-import { STAGES, makePlan, makeStageImage } from "./gemini.js";
+import { STAGES, makePlan, makeStageImage, resolveModels } from "./gemini.js";
 
 const MAX_SIDE = 1024; // downscale uploads to save bandwidth and tokens
 const KEY_STORAGE = "draw-guide:gemini-key";
@@ -10,6 +10,7 @@ const els = {
   keyInput: document.getElementById("key-input"),
   keySaved: document.getElementById("key-saved"),
   keyForget: document.getElementById("key-forget"),
+  models: document.getElementById("models"),
   dropzone: document.getElementById("dropzone"),
   fileInput: document.getElementById("file-input"),
   preview: document.getElementById("preview"),
@@ -66,6 +67,13 @@ function showKeyState() {
   els.keyForm.hidden = Boolean(apiKey);
   els.keySaved.hidden = !apiKey;
   els.generate.disabled = !(apiKey && reference);
+  els.models.textContent = "";
+  if (apiKey) {
+    const key = apiKey;
+    resolveModels(key).then(({ text, image }) => {
+      if (key === apiKey) els.models.textContent = `Using ${text} for instructions and ${image} for pictures.`;
+    });
+  }
 }
 
 els.fileInput.addEventListener("change", () => loadFile(els.fileInput.files[0]));
