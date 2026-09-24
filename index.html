@@ -14,10 +14,22 @@
     </header>
 
     <main>
-      <div id="key-warning" class="banner" hidden>
-        The server has no Gemini API key. Copy <code>.env.example</code> to <code>.env</code>, add your key from
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, then restart the server.
-      </div>
+      <section id="key-card" class="card key-card">
+        <form id="key-form" class="key-form">
+          <label for="key-input">Gemini API key</label>
+          <div class="key-row">
+            <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key (starts with AIza…)" />
+            <button type="submit">Save</button>
+          </div>
+          <p class="hint">
+            Get a free key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.
+            It's saved only in this browser and sent only to Google.
+          </p>
+        </form>
+        <p id="key-saved" class="key-saved" hidden>
+          🔑 Gemini API key saved in this browser. <button id="key-forget" type="button" class="link">Change or remove key</button>
+        </p>
+      </section>
 
       <section class="card upload-card">
         <label id="dropzone" class="dropzone" for="file-input">

@@ -62,18 +62,6 @@ main {
   box-shadow: var(--shadow);
 }
 
-.banner {
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  background: #fff3cd;
-  color: #664d03;
-  border: 1px solid #ffe69c;
-}
-.banner a {
-  color: inherit;
-}
-
 /* Upload */
 .upload-card {
   display: grid;
@@ -326,4 +314,45 @@ button:disabled {
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   font-size: 0.925rem;
+}
+
+/* API key */
+.key-card {
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.key-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.key-row {
+  display: flex;
+  gap: 8px;
+}
+.key-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.key-form .hint {
+  margin: 8px 0 0;
+}
+.hint a {
+  color: var(--accent);
+}
+.key-saved {
+  margin: 0;
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
 }

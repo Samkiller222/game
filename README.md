@@ -13,37 +13,44 @@ Each step also gets written instructions specific to your image, plus a list of 
 
 ## How it works
 
-- `public/` is a plain HTML/CSS/JS frontend. It shrinks the upload to 1024px and sends it to the server.
-- `server.js` is a zero-dependency Node server that keeps your Gemini API key private and calls Gemini:
+It's a fully static site (HTML/CSS/JS, no build step), so it runs on **GitHub Pages**.
+
+- `index.html`, `style.css` and `app.js` are the page and UI. Uploads are shrunk to 1024px in the browser.
+- `gemini.js` calls the Gemini API directly from the browser:
   - **Text model** (`gemini-2.5-flash`): looks at the image and returns the written guide as structured JSON.
   - **Image model** (`gemini-2.5-flash-image`): makes each stage picture.
 - The stage pictures are generated **backwards** (finished → colours → details → line art → sketch → shapes).
   Each one is made by *removing* something from the next stage, so the steps line up far better than
   drawing each one from scratch. Use **Redraw** on any step to regenerate it and the steps before it.
 
-## Run it
+## Your API key
 
-Requires Node.js 20.12 or newer. There's nothing to `npm install`.
+GitHub Pages can't keep secrets, so **the key is never stored in this repo**. Each visitor pastes their own
+free key from [Google AI Studio](https://aistudio.google.com/apikey) into the page. It's saved in that
+browser's `localStorage` and sent only to Google. Use **Change or remove key** to clear it.
+
+Never commit an API key to this repo. It would be public, and Google automatically disables leaked keys.
+
+## Publish on GitHub Pages
+
+1. On GitHub go to **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
+3. Choose the branch with this code and the **/ (root)** folder, then **Save**.
+4. After a minute the site is live at `https://<your-username>.github.io/<repo-name>/`.
+
+## Run it locally
+
+Any static file server works, for example:
 
 ```bash
-cp .env.example .env      # then put your key in .env
-npm start                 # http://localhost:3000
+python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-Get a free API key at <https://aistudio.google.com/apikey>.
-
-### Configuration (`.env`)
-
-| Variable | Default | |
-|---|---|---|
-| `GEMINI_API_KEY` | (required) | Your Gemini API key |
-| `PORT` | `3000` | Server port |
-| `GEMINI_TEXT_MODEL` | `gemini-2.5-flash` | Model that writes the instructions |
-| `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` | Model that draws the stages. Try a newer/pro image model for better consistency |
+(Opening `index.html` directly as a file won't work, because browsers block ES modules on `file://`.)
 
 ## Notes
 
 - One guide costs 1 text call and 5–6 image calls, and takes about 1–2 minutes.
 - For photos, choose a drawing style (cartoon, anime, …) so the guide teaches a drawing instead of copying a photo.
   "Keep the original style" uses your upload as the final step.
-- Deploy anywhere that runs Node (Render, Railway, Fly.io, a VPS…) and set `GEMINI_API_KEY` as an environment variable there.
+- To change models, edit `TEXT_MODEL` / `IMAGE_MODEL` at the top of `gemini.js`.

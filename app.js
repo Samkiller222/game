@@ -1,9 +1,15 @@
-// Draw Guide frontend. Talks only to our own server (/api/*), never to Gemini directly.
+// Draw Guide frontend. Runs entirely in the browser (GitHub Pages friendly).
+
+import { STAGES, makePlan, makeStageImage } from "./gemini.js";
 
 const MAX_SIDE = 1024; // downscale uploads to save bandwidth and tokens
+const KEY_STORAGE = "draw-guide:gemini-key";
 
 const els = {
-  keyWarning: document.getElementById("key-warning"),
+  keyForm: document.getElementById("key-form"),
+  keyInput: document.getElementById("key-input"),
+  keySaved: document.getElementById("key-saved"),
+  keyForget: document.getElementById("key-forget"),
   dropzone: document.getElementById("dropzone"),
   fileInput: document.getElementById("file-input"),
   preview: document.getElementById("preview"),
@@ -17,8 +23,9 @@ const els = {
   template: document.getElementById("step-template"),
 };
 
-let stages = []; // [{ id, title }] in drawing order, from the server
+const stages = STAGES; // in drawing order
 let reference = null; // { mimeType, data } of the uploaded (downscaled) image
+let apiKey = "";
 
 // State of the current run. Bumping runId makes older in-flight requests ignore their results.
 let run = null;
@@ -28,9 +35,38 @@ let runId = 0;
 // Setup
 // ---------------------------------------------------------------------------
 
-const config = await fetch("/api/config").then((r) => r.json());
-stages = config.stages;
-els.keyWarning.hidden = config.hasKey;
+try {
+  apiKey = localStorage.getItem(KEY_STORAGE) || "";
+} catch {
+  // storage blocked (private mode etc.) — the key just won't be remembered
+}
+showKeyState();
+
+els.keyForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  apiKey = els.keyInput.value.trim();
+  if (!apiKey) return;
+  try {
+    localStorage.setItem(KEY_STORAGE, apiKey);
+  } catch {}
+  els.keyInput.value = "";
+  showKeyState();
+});
+
+els.keyForget.addEventListener("click", () => {
+  apiKey = "";
+  try {
+    localStorage.removeItem(KEY_STORAGE);
+  } catch {}
+  showKeyState();
+  els.keyInput.focus();
+});
+
+function showKeyState() {
+  els.keyForm.hidden = Boolean(apiKey);
+  els.keySaved.hidden = !apiKey;
+  els.generate.disabled = !(apiKey && reference);
+}
 
 els.fileInput.addEventListener("change", () => loadFile(els.fileInput.files[0]));
 
@@ -65,7 +101,7 @@ async function loadFile(file) {
   els.preview.src = dataUrl(reference);
   els.preview.hidden = false;
   els.hint.hidden = true;
-  els.generate.disabled = false;
+  els.generate.disabled = !apiKey;
   setStatus("");
 }
 
@@ -90,9 +126,11 @@ async function downscale(file) {
 
 async function startGuide() {
   if (!reference) return;
+  if (!apiKey) return setStatus("Add your Gemini API key first.", true);
   const id = ++runId;
   run = {
     id,
+    apiKey,
     style: els.style.value,
     images: {}, // stageId -> { mimeType, data }
     busy: new Set(),
@@ -110,14 +148,14 @@ async function startGuide() {
   await Promise.allSettled([planDone, imagesDone]);
 
   if (id !== runId) return;
-  els.generate.disabled = false;
+  els.generate.disabled = !apiKey;
   const failed = stages.some((s) => !run.images[s.id]);
   setStatus(failed ? "Some steps failed. Use “Try again” on a step to retry it." : "Your guide is ready. Happy drawing!", failed);
 }
 
 async function loadPlan(id) {
   try {
-    const plan = await api("/api/plan", { image: reference, style: run.style });
+    const plan = await makePlan(run.apiKey, reference, run.style);
     if (id !== runId) return;
     renderSummary(plan);
     for (const step of plan.steps) renderInstructions(step);
@@ -156,7 +194,7 @@ async function runChainFrom(index, id) {
     showLoading(stage);
     run.busy.add(stage.id);
     try {
-      const { image } = await api("/api/stage", { stage: stage.id, image: source, style: run.style });
+      const image = await makeStageImage(run.apiKey, stage.id, source, run.style);
       if (id !== runId) return;
       run.images[stage.id] = image;
       showImage(stage, image);
@@ -169,17 +207,6 @@ async function runChainFrom(index, id) {
       run.busy.delete(stage.id);
     }
   }
-}
-
-async function api(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
 }
 
 // ---------------------------------------------------------------------------

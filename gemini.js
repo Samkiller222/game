@@ -1,26 +1,9 @@
-// Draw Guide server: serves the frontend and proxies requests to the Gemini API
-// so the API key never reaches the browser. No dependencies — Node 20.12+ only.
+// Gemini API calls, made directly from the browser with the user's own API key.
+// (GitHub Pages is static hosting, so there's no server to hide a key behind.)
 
-import http from "node:http";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-try {
-  process.loadEnvFile(); // reads .env if present
-} catch {
-  // no .env file — rely on real environment variables
-}
-
-const PORT = Number(process.env.PORT) || 3000;
-const API_KEY = process.env.GEMINI_API_KEY;
-const API_BASE = process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta";
-const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
-const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
-
-const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-const MAX_BODY_BYTES = 20 * 1024 * 1024;
-const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+export const TEXT_MODEL = "gemini-2.5-flash";
+export const IMAGE_MODEL = "gemini-2.5-flash-image";
 
 // ---------------------------------------------------------------------------
 // Drawing stages, in the order the user draws them.
@@ -95,24 +78,15 @@ function finalPrompt(style) {
 }
 
 // ---------------------------------------------------------------------------
-// Gemini calls
+// API calls
 // ---------------------------------------------------------------------------
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function callGemini(model, body) {
-  if (!API_KEY) throw new HttpError(500, "GEMINI_API_KEY is not set on the server. Add it to .env and restart.");
-
+async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": API_KEY },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(body),
     });
     if (res.ok) return res.json();
@@ -127,7 +101,7 @@ async function callGemini(model, body) {
     try {
       message = JSON.parse(text).error?.message || text;
     } catch {}
-    throw new HttpError(res.status === 429 ? 429 : 502, `Gemini error (${res.status}): ${message}`);
+    throw new Error(`Gemini error (${res.status}): ${message}`);
   }
 }
 
@@ -135,7 +109,7 @@ function responseParts(data) {
   const candidate = data.candidates?.[0];
   if (!candidate) {
     const reason = data.promptFeedback?.blockReason;
-    throw new HttpError(422, reason ? `Gemini blocked this request (${reason}).` : "Gemini returned no result.");
+    throw new Error(reason ? `Gemini blocked this request (${reason}).` : "Gemini returned no result.");
   }
   return candidate.content?.parts || [];
 }
@@ -173,7 +147,7 @@ const PLAN_SCHEMA = {
   required: ["subject", "difficulty", "materials", "palette", "steps"],
 };
 
-async function makePlan(image, style) {
+export async function makePlan(apiKey, image, style) {
   const styleNote = STYLES[style]
     ? `The learner wants to draw it as ${STYLES[style]}.`
     : "Keep the style of the reference image.";
@@ -185,7 +159,7 @@ async function makePlan(image, style) {
     "where to place them, which lines to keep, which colours go where, where the light comes from), plus one helpful tip. " +
     "Also list the materials needed and the main colour palette as hex codes.";
 
-  const data = await callGemini(TEXT_MODEL, {
+  const data = await callGemini(apiKey, TEXT_MODEL, {
     contents: [{ role: "user", parts: [{ inline_data: { mime_type: image.mimeType, data: image.data } }, { text: prompt }] }],
     generationConfig: { responseMimeType: "application/json", responseSchema: PLAN_SCHEMA },
   });
@@ -195,7 +169,7 @@ async function makePlan(image, style) {
   try {
     plan = JSON.parse(text);
   } catch {
-    throw new HttpError(502, "Gemini returned a plan that wasn't valid JSON. Please try again.");
+    throw new Error("Gemini returned a plan that wasn't valid JSON. Please try again.");
   }
 
   // Normalise to exactly our stages, in order, even if the model skipped or reordered some.
@@ -211,11 +185,11 @@ async function makePlan(image, style) {
   return plan;
 }
 
-async function makeStageImage(stageId, source, style) {
+export async function makeStageImage(apiKey, stageId, source, style) {
   const stage = STAGE_BY_ID[stageId];
   const prompt = `${stageId === "final" ? finalPrompt(style) : stage.prompt} ${KEEP_ALIGNED}`;
 
-  const data = await callGemini(IMAGE_MODEL, {
+  const data = await callGemini(apiKey, IMAGE_MODEL, {
     contents: [{ role: "user", parts: [{ inline_data: { mime_type: source.mimeType, data: source.data } }, { text: prompt }] }],
     generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
   });
@@ -224,96 +198,5 @@ async function makeStageImage(stageId, source, style) {
     const inline = part.inlineData || part.inline_data;
     if (inline?.data) return { mimeType: inline.mimeType || inline.mime_type || "image/png", data: inline.data };
   }
-  throw new HttpError(502, "Gemini didn't return an image for this stage. Try regenerating it.");
+  throw new Error("Gemini didn't return an image for this stage. Try redrawing it.");
 }
-
-// ---------------------------------------------------------------------------
-// HTTP plumbing
-// ---------------------------------------------------------------------------
-
-async function readJson(req) {
-  let size = 0;
-  const chunks = [];
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, "Image is too large (max 20 MB).");
-    chunks.push(chunk);
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw new HttpError(400, "Request body must be JSON.");
-  }
-}
-
-function validateImage(image) {
-  if (!image || typeof image.data !== "string" || !ALLOWED_MIME.has(image.mimeType)) {
-    throw new HttpError(400, "Send an image as { mimeType: 'image/png' | 'image/jpeg' | 'image/webp', data: <base64> }.");
-  }
-  return image;
-}
-
-function validateStyle(style) {
-  return Object.hasOwn(STYLES, style) ? style : "original";
-}
-
-function sendJson(res, status, body) {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(body));
-}
-
-const MIME_TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-};
-
-async function serveStatic(req, res) {
-  const urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
-  const filePath = path.join(PUBLIC_DIR, urlPath === "/" ? "index.html" : urlPath);
-  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) return sendJson(res, 403, { error: "Forbidden" });
-  try {
-    const body = await fs.readFile(filePath);
-    res.writeHead(200, { "Content-Type": MIME_TYPES[path.extname(filePath)] || "application/octet-stream" });
-    res.end(body);
-  } catch {
-    sendJson(res, 404, { error: "Not found" });
-  }
-}
-
-const server = http.createServer(async (req, res) => {
-  try {
-    if (req.method === "GET" && req.url === "/api/config") {
-      return sendJson(res, 200, {
-        hasKey: Boolean(API_KEY),
-        stages: STAGES.map(({ id, title }) => ({ id, title })),
-        styles: Object.keys(STYLES),
-      });
-    }
-    if (req.method === "POST" && req.url === "/api/plan") {
-      const body = await readJson(req);
-      const plan = await makePlan(validateImage(body.image), validateStyle(body.style));
-      return sendJson(res, 200, plan);
-    }
-    if (req.method === "POST" && req.url === "/api/stage") {
-      const body = await readJson(req);
-      if (!STAGE_BY_ID[body.stage]) throw new HttpError(400, "Unknown stage.");
-      const image = await makeStageImage(body.stage, validateImage(body.image), validateStyle(body.style));
-      return sendJson(res, 200, { image });
-    }
-    if (req.method === "GET") return serveStatic(req, res);
-    sendJson(res, 404, { error: "Not found" });
-  } catch (err) {
-    const status = err instanceof HttpError ? err.status : 500;
-    if (status >= 500) console.error(err);
-    sendJson(res, status, { error: err.message || "Something went wrong." });
-  }
-});
-
-server.listen(PORT, () => {
-  console.log(`Draw Guide running at http://localhost:${PORT}`);
-  if (!API_KEY) console.warn("Warning: GEMINI_API_KEY is not set — copy .env.example to .env and add your key.");
-});
